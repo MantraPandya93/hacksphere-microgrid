@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Microgrid Forecast</title>
+<style>
+:root{
+  --bg:#f4f6f9; --card:#ffffff; --ink:#18212b; --mute:#617080; --line:#e2e7ed;
+  --grid:#16915a; --grid-bg:#e5f5ed; --storage:#c77700; --storage-bg:#fdf1dc;
+  --crit:#d3283b; --crit-bg:#fdeaec; --accent:#2563b8; --soc:#6d46c8; --warn-bg:#fff6dd; --warn-ink:#7a5600;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0e1319; --card:#161d25; --ink:#e7ecf1; --mute:#93a0ae; --line:#26303b;
+    --grid:#38c288; --grid-bg:#12392a; --storage:#f2aa3d; --storage-bg:#3a2a0d;
+    --crit:#ff6475; --crit-bg:#431820; --accent:#6aa8f2; --soc:#a98bff; --warn-bg:#3a2f0d; --warn-ink:#f0cf74;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px 40px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between;padding:20px 0 12px}
+h1{font-size:21px;margin:0;font-weight:650;letter-spacing:-.01em}
+.sub{color:var(--mute);font-size:13px;margin-top:2px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--mute);white-space:nowrap}
+.chip.ok{color:var(--grid);border-color:var(--grid)}
+.chip.bad{color:var(--storage);border-color:var(--storage)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.card h2{margin:0 0 10px;font-size:14px;font-weight:650;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+.banners{display:grid;gap:10px;margin:6px 0 14px}
+.banner{border-radius:12px;padding:12px 14px;border:1px solid;font-size:14px}
+.banner b{font-weight:650}
+.banner.crit{background:var(--crit-bg);border-color:var(--crit);color:var(--crit)}
+.banner.warn{background:var(--warn-bg);border-color:var(--storage);color:var(--warn-ink)}
+.banner.info{background:var(--card);border-color:var(--line);color:var(--mute)}
+.banner.err{background:var(--crit-bg);border-color:var(--crit);color:var(--crit)}
+.banner ul{margin:6px 0 0 18px;padding:0}
+.crit-pulse{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--crit) 22%,transparent)}}
+@media (prefers-reduced-motion:reduce){.crit-pulse{animation:none}}
+.input{display:grid;gap:12px;grid-template-columns:1fr}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{border:1px solid var(--line);background:transparent;color:var(--ink);padding:7px 12px;border-radius:9px;cursor:pointer;font:inherit;font-size:13px}
+.tab[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.panel[hidden]{display:none}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+label{font-size:12px;color:var(--mute);display:grid;gap:3px}
+input,select{font:inherit;font-size:14px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);min-width:0}
+input[type=file]{padding:5px}
+button.primary{background:var(--accent);color:#fff;border:0;border-radius:9px;padding:9px 16px;font:inherit;font-weight:600;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font:inherit;cursor:pointer}
+button:disabled{opacity:.55;cursor:progress}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:14px 0}
+.kpi .v{font-size:25px;font-weight:700;letter-spacing:-.02em}
+.kpi .l{font-size:12px;color:var(--mute)}
+.badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:650;white-space:nowrap}
+.badge.grid{background:var(--grid-bg);color:var(--grid)}
+.badge.storage{background:var(--storage-bg);color:var(--storage)}
+.badge.crit{background:var(--crit-bg);color:var(--crit)}
+.big{font-size:15px;padding:6px 12px}
+.grid2{display:grid;gap:14px;grid-template-columns:1fr}
+@media (min-width:900px){.grid2{grid-template-columns:3fr 2fr}}
+svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.timeline{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px}
+.cell{height:34px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;position:relative}
+.cell.grid{background:var(--grid)} .cell.storage{background:var(--storage)}
+.cell.over{outline:2px solid var(--crit);outline-offset:1px}
+.ticks{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px;font-size:10px;color:var(--mute);text-align:center;margin-top:3px}
+.tablewrap{overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--card);color:var(--mute);font-weight:600;font-size:12px}
+th:first-child,td:first-child{text-align:left}
+td.mode{text-align:left}
+.logs{font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;max-height:220px;overflow:auto}
+.logs div{padding:2px 0;border-bottom:1px dashed var(--line)}
+.lv-ALERT{color:var(--crit)} .lv-WARN{color:var(--storage)} .lv-ERROR{color:var(--crit)}
+.list{font-size:13px;margin:8px 0 0;padding:0;list-style:none;display:grid;gap:4px}
+.list li{display:flex;justify-content:space-between;gap:10px;background:var(--bg);border-radius:8px;padding:5px 9px}
+.list button{border:0;background:transparent;color:var(--crit);cursor:pointer;font:inherit}
+.muted{color:var(--mute);font-size:13px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.stack{display:grid;gap:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Smart Microgrid &middot; 24-hour Demand Forecast</h1>
+      <div class="sub">QuickML demand forecasting with automatic Main Grid / Renewable Storage dispatch</div>
+    </div>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <div class="banners" id="banners" aria-live="polite"></div>
+
+  <section class="card input" aria-label="Telemetry input">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-sample" aria-selected="true" aria-controls="p-sample">Sample window</button>
+      <button class="tab" role="tab" id="tab-upload" aria-selected="false" aria-controls="p-upload">Upload CSV</button>
+      <button class="tab" role="tab" id="tab-manual" aria-selected="false" aria-controls="p-manual">Enter values</button>
+    </div>
+
+    <div class="panel" id="p-sample">
+      <div class="row">
+        <label>24-hour window starting at
+          <select id="sample-start"></select>
+        </label>
+        <button class="primary" id="run-sample">Run forecast</button>
+        <label style="grid-auto-flow:column;align-items:center;gap:6px;margin-bottom:8px">
+          <input type="checkbox" id="live"> Live mode (roll forward 1 h every 20 s)
+        </label>
+      </div>
+    </div>
+
+    <div class="panel" id="p-upload" hidden>
+      <div class="row">
+        <label>CSV with timestamp, ambient_temp_c, humidity_pct, solar_irradiance_wm2
+          <input type="file" id="file" accept=".csv,text/csv">
+        </label>
+        <button class="primary" id="run-upload">Upload &amp; forecast</button>
+      </div>
+      <p class="muted" style="margin:8px 0 0">Hourly rows, one per forecast hour (24 rows = one day). Missing values are filled automatically.</p>
+    </div>
+
+    <div class="panel" id="p-manual" hidden>
+      <div class="row">
+        <label>Timestamp<input type="datetime-local" id="m-ts"></label>
+        <label>Temp &deg;C<input type="number" step="0.1" id="m-temp" style="width:90px"></label>
+        <label>Humidity %<input type="number" step="0.1" id="m-hum" style="width:90px"></label>
+        <label>Solar W/m&sup2;<input type="number" step="1" id="m-sol" style="width:90px"></label>
+        <button class="ghost" id="m-add">Add hour</button>
+        <button class="ghost" id="m-fill">Add next 24 h</button>
+        <button class="primary" id="run-manual">Forecast</button>
+      </div>
+      <ul class="list" id="m-list"></ul>
+    </div>
+
+    <div class="row">
+      <label>Battery capacity (kWh)<input type="number" id="cap" value="4000" min="50" style="width:120px"></label>
+      <label>Initial charge (%)<input type="number" id="soc0" value="90" min="0" max="100" style="width:110px"></label>
+      <span class="muted" id="status"></span>
+    </div>
+  </section>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Predicted load curve (kW)</h2>
+      <div id="chart-demand"></div>
+      <div class="legend">
+        <span><i style="background:var(--grid)"></i>Main Grid hour</span>
+        <span><i style="background:var(--storage)"></i>Renewable Storage hour</span>
+        <span><i style="background:var(--crit)"></i>Overload &ge; 200 kW</span>
+        <span><i style="background:var(--storage);opacity:.25"></i>18:00&ndash;22:00 window</span>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Battery state of charge</h2>
+      <div id="chart-soc"></div>
+      <div class="legend"><span id="soc-note">Illustrative battery model; the grid mode always follows the dispatch rules.</span></div>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:14px">
+    <h2>Dispatch timeline</h2>
+    <div class="timeline" id="timeline"></div>
+    <div class="ticks" id="ticks"></div>
+  </section>
+
+  <div class="grid2" style="margin-top:14px">
+    <section class="card">
+      <h2>Hourly detail</h2>
+      <div class="tablewrap">
+        <table id="table">
+          <thead><tr><th>Time</th><th>Temp &deg;C</th><th>Hum %</th><th>Solar</th><th>Demand kW</th><th style="text-align:left">Mode</th><th style="text-align:left">Alert</th><th>SoC %</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="card">
+      <h2>System log</h2>
+      <div class="logs" id="logs"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+
+function el(tag, attrs, text) {
+  const e = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function svg(tag, attrs, text) {
+  const e = document.createElementNS(NS, tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+const fmt = (n, d = 1) => (n === null || n === undefined || isNaN(n)) ? "-" : Number(n).toFixed(d);
+const hhmm = (ts) => ts.slice(11, 16);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+let busy = false, liveTimer = null, liveStart = 0, lastData = null;
+let manualRows = [];
+
+/* ---------------- API ---------------- */
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  let body = null;
+  try { body = await r.json(); } catch (_) { /* non-JSON error */ }
+  if (!r.ok) throw new Error((body && body.error) || ("Request failed (" + r.status + ")"));
+  return body;
+}
+function params() {
+  const cap = encodeURIComponent($("cap").value || "4000");
+  const soc = encodeURIComponent($("soc0").value || "90");
+  return "battery_capacity_kwh=" + cap + "&initial_soc_pct=" + soc;
+}
+function setBusy(v, msg) {
+  busy = v;
+  document.querySelectorAll("button.primary").forEach((b) => (b.disabled = v));
+  const s = $("status");
+  s.textContent = "";
+  if (v) { s.appendChild(el("span", { class: "spin" })); s.appendChild(document.createTextNode(msg || "Forecasting...")); }
+}
+async function run(promiseFactory, msg) {
+  if (busy) return;
+  setBusy(true, msg);
+  try {
+    const data = await promiseFactory();
+    lastData = data;
+    render(data);
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    setBusy(false);
+    loadLogs();
+  }
+}
+
+/* ---------------- Rendering ---------------- */
+function showError(msg) {
+  const b = $("banners");
+  b.textContent = "";
+  const d = el("div", { class: "banner err", role: "alert" });
+  d.appendChild(el("b", null, "Could not build forecast. "));
+  d.appendChild(document.createTextNode(msg));
+  b.appendChild(d);
+}
+
+function render(d) {
+  renderChips(d);
+  renderBanners(d);
+  renderKpis(d);
+  drawDemand(d);
+  drawSoc(d);
+  renderTimeline(d);
+  renderTable(d);
+}
+
+function renderChips(d) {
+  const c = $("chips");
+  c.textContent = "";
+  const ok = d.source === "quickml";
+  c.appendChild(el("span", { class: "chip " + (ok ? "ok" : "bad") }, ok ? "QuickML model live" : "Offline estimate (QuickML unavailable)"));
+  if (ok) c.appendChild(el("span", { class: "chip" }, d.method + " · " + fmt(d.quickml_latency_s, 1) + " s"));
+  c.appendChild(el("span", { class: "chip" }, d.hours.length + " hours"));
+}
+
+function renderBanners(d) {
+  const b = $("banners");
+  b.textContent = "";
+  if (d.alerts.length) {
+    const box = el("div", { class: "banner crit crit-pulse", role: "alert" });
+    box.appendChild(el("b", null, "CRITICAL OVERLOAD ALERT — "));
+    box.appendChild(document.createTextNode(d.alerts.length + " forecast hour(s) at or above " + d.rules.overload_at_kw + " kW (peak " + fmt(d.summary.peak_kw) + " kW at " + hhmm(d.summary.peak_timestamp) + ")."));
+    const ul = el("ul");
+    d.alerts.slice(0, 6).forEach((a) => ul.appendChild(el("li", null, hhmm(a.timestamp) + " → " + fmt(a.demand_kw) + " kW")));
+    if (d.alerts.length > 6) ul.appendChild(el("li", null, "+" + (d.alerts.length - 6) + " more"));
+    box.appendChild(ul);
+    b.appendChild(box);
+  }
+  if (d.summary.battery_low_hours) {
+    const box = el("div", { class: "banner warn" });
+    box.appendChild(el("b", null, "Battery low: "));
+    box.appendChild(document.createTextNode("state of charge drops below " + d.battery.low_soc_pct + "% for " + d.summary.battery_low_hours + " hour(s) (minimum " + fmt(d.summary.min_soc_pct) + "%)."));
+    b.appendChild(box);
+  }
+  if (d.source !== "quickml") {
+    const box = el("div", { class: "banner warn" });
+    box.appendChild(el("b", null, "Showing an offline estimate. "));
+    box.appendChild(document.createTextNode(d.note || "The QuickML endpoint could not be reached."));
+    b.appendChild(box);
+  }
+  if (d.warnings.length) {
+    const box = el("div", { class: "banner info" });
+    box.appendChild(el("b", null, "Data cleaning notes"));
+    const ul = el("ul");
+    d.warnings.forEach((w) => ul.appendChild(el("li", null, w)));
+    box.appendChild(ul);
+    b.appendChild(box);
+  }
+}
+
+function modeBadge(mode, big) {
+  const storage = mode === "Renewable Storage Mode";
+  return el("span", { class: "badge " + (storage ? "storage" : "grid") + (big ? " big" : "") }, storage ? "Renewable Storage" : "Main Grid");
+}
+
+function renderKpis(d) {
+  const s = d.summary, k = $("kpis");
+  k.textContent = "";
+  const add = (label, valueNode, sub) => {
+    const c = el("div", { class: "card kpi" });
+    const v = el("div", { class: "v" });
+    v.appendChild(valueNode);
+    c.appendChild(v);
+    c.appendChild(el("div", { class: "l" }, label + (sub ? " · " + sub : "")));
+    k.appendChild(c);
+  };
+  add("Active grid state (first hour)", modeBadge(s.first_mode, true), hhmm(d.hours[0].timestamp));
+  add("Peak demand", document.createTextNode(fmt(s.peak_kw) + " kW"), "at " + hhmm(s.peak_timestamp));
+  const ov = el("span", null, String(s.overload_hours));
+  if (s.overload_hours) ov.style.color = css("--crit");
+  add("Overload hours (≥ 200 kW)", ov);
+  add("Storage / Main Grid hours", document.createTextNode(s.storage_hours + " / " + s.grid_hours));
+  add("Battery charge at end", document.createTextNode(fmt(s.final_soc_pct) + "%"), "min " + fmt(s.min_soc_pct) + "%");
+}
+
+/* ---- SVG charts ---- */
+function niceMax(v) { const steps = [50, 100, 150, 200, 250, 300, 350, 400, 500, 600]; return steps.find((s) => s >= v) || Math.ceil(v / 100) * 100; }
+
+function drawDemand(d) {
+  const W = 760, H = 300, m = { l: 46, r: 14, t: 14, b: 34 };
+  const pts = d.hours, n = pts.length;
+  const ymax = niceMax(Math.max(220, ...pts.map((p) => p.demand_kw)) * 1.05);
+  const X = (i) => m.l + (n === 1 ? (W - m.l - m.r) / 2 : (i * (W - m.l - m.r)) / (n - 1));
+  const Y = (v) => m.t + (1 - v / ymax) * (H - m.t - m.b);
+  const s = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Predicted demand in kW per hour with grid mode markers" });
+  const ink = css("--mute"), line = css("--line");
+
+  const step = ymax > 300 ? 100 : 50;
+  for (let v = 0; v <= ymax; v += step) {
+    s.appendChild(svg("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: line, "stroke-width": 1 }));
+    s.appendChild(svg("text", { x: m.l - 7, y: Y(v) + 4, "text-anchor": "end", "font-size": 11, fill: ink }, String(v)));
+  }
+  // evening window bands (18-22 inclusive)
+  const bw = n > 1 ? (W - m.l - m.r) / (n - 1) : 20;
+  pts.forEach((p, i) => {
+    if (p.hour >= d.rules.evening_window[0] && p.hour <= d.rules.evening_window[1]) {
+      s.appendChild(svg("rect", { x: X(i) - bw / 2, y: m.t, width: bw, height: H - m.t - m.b, fill: css("--storage"), opacity: 0.13 }));
+    }
+  });
+  const th = (v, color, label) => {
+    s.appendChild(svg("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: color, "stroke-width": 1.4, "stroke-dasharray": "5 4" }));
+    s.appendChild(svg("text", { x: W - m.r - 2, y: Y(v) - 4, "text-anchor": "end", "font-size": 11, fill: color }, label));
+  };
+  th(d.rules.storage_above_kw, css("--storage"), "160 kW storage threshold");
+  th(d.rules.overload_at_kw, css("--crit"), "200 kW overload");
+
+  const path = pts.map((p, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.demand_kw).toFixed(1)).join(" ");
+  s.appendChild(svg("path", { d: path, fill: "none", stroke: css("--accent"), "stroke-width": 2.4, "stroke-linejoin": "round" }));
+  pts.forEach((p, i) => {
+    const c = svg("circle", { cx: X(i), cy: Y(p.demand_kw), r: p.overload ? 5.5 : 4, fill: p.overload ? css("--crit") : (p.mode === "Renewable Storage Mode" ? css("--storage") : css("--grid")), stroke: css("--card"), "stroke-width": 1.5 });
+    c.appendChild(svg("title", null, p.timestamp + " — " + fmt(p.demand_kw) + " kW — " + p.mode + (p.overload ? " — CRITICAL OVERLOAD" : "")));
+    s.appendChild(c);
+  });
+  const every = n > 30 ? Math.ceil(n / 12) : n > 16 ? 3 : 2;
+  pts.forEach((p, i) => {
+    if (i % every === 0) s.appendChild(svg("text", { x: X(i), y: H - m.b + 16, "text-anchor": "middle", "font-size": 11, fill: ink }, hhmm(p.timestamp)));
+  });
+  $("chart-demand").replaceChildren(s);
+}
+
+function drawSoc(d) {
+  const W = 420, H = 300, m = { l: 40, r: 12, t: 14, b: 34 };
+  const pts = d.hours, n = pts.length;
+  const X = (i) => m.l + (n === 1 ? (W - m.l - m.r) / 2 : (i * (W - m.l - m.r)) / (n - 1));
+  const Y = (v) => m.t + (1 - v / 100) * (H - m.t - m.b);
+  const s = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Battery state of charge in percent per hour" });
+  const ink = css("--mute"), line = css("--line");
+  [0, 25, 50, 75, 100].forEach((v) => {
+    s.appendChild(svg("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: line }));
+    s.appendChild(svg("text", { x: m.l - 6, y: Y(v) + 4, "text-anchor": "end", "font-size": 11, fill: ink }, v + "%"));
+  });
+  s.appendChild(svg("line", { x1: m.l, x2: W - m.r, y1: Y(d.battery.low_soc_pct), y2: Y(d.battery.low_soc_pct), stroke: css("--crit"), "stroke-dasharray": "4 4", "stroke-width": 1.2 }));
+  const path = pts.map((p, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p.soc_pct).toFixed(1)).join(" ");
+  const area = path + " L" + X(n - 1).toFixed(1) + " " + Y(0) + " L" + X(0).toFixed(1) + " " + Y(0) + " Z";
+  s.appendChild(svg("path", { d: area, fill: css("--soc"), opacity: 0.14 }));
+  s.appendChild(svg("path", { d: path, fill: "none", stroke: css("--soc"), "stroke-width": 2.4, "stroke-linejoin": "round" }));
+  pts.forEach((p, i) => {
+    const c = svg("circle", { cx: X(i), cy: Y(p.soc_pct), r: 3, fill: css("--soc") });
+    c.appendChild(svg("title", null, hhmm(p.timestamp) + " — " + fmt(p.soc_pct) + "% (" + (p.battery_kw < 0 ? "discharging " : "charging ") + fmt(Math.abs(p.battery_kw)) + " kW)"));
+    s.appendChild(c);
+  });
+  const every = n > 30 ? Math.ceil(n / 8) : n > 12 ? 4 : 2;
+  pts.forEach((p, i) => { if (i % every === 0) s.appendChild(svg("text", { x: X(i), y: H - m.b + 16, "text-anchor": "middle", "font-size": 11, fill: ink }, hhmm(p.timestamp))); });
+  $("chart-soc").replaceChildren(s);
+}
+
+function renderTimeline(d) {
+  const t = $("timeline"), k = $("ticks");
+  t.textContent = ""; k.textContent = "";
+  d.hours.forEach((p, i) => {
+    const storage = p.mode === "Renewable Storage Mode";
+    const c = el("div", { class: "cell " + (storage ? "storage" : "grid") + (p.overload ? " over" : ""), title: p.timestamp + " — " + p.mode + " — " + fmt(p.demand_kw) + " kW" + (p.overload ? " — OVERLOAD" : ""), tabindex: "0", "aria-label": hhmm(p.timestamp) + " " + p.mode + (p.overload ? " overload" : "") });
+    if (d.hours.length <= 30) c.textContent = storage ? "S" : "G";
+    t.appendChild(c);
+    k.appendChild(el("div", null, d.hours.length <= 30 ? p.timestamp.slice(11, 13) : (i % 6 === 0 ? p.timestamp.slice(11, 13) : "")));
+  });
+}
+
+function renderTable(d) {
+  const tb = $("table").querySelector("tbody");
+  tb.textContent = "";
+  d.hours.forEach((p) => {
+    const tr = el("tr");
+    const td = (txt) => { const c = el("td", null, txt); tr.appendChild(c); return c; };
+    td(p.timestamp.slice(5, 16));
+    td(fmt(p.ambient_temp_c)); td(fmt(p.humidity_pct, 0)); td(fmt(p.solar_irradiance_wm2, 0));
+    const dm = td(fmt(p.demand_kw)); dm.style.fontWeight = "650";
+    const m = el("td", { class: "mode" }); m.appendChild(modeBadge(p.mode)); tr.appendChild(m);
+    const a = el("td", { class: "mode" });
+    if (p.overload) a.appendChild(el("span", { class: "badge crit" }, "OVERLOAD"));
+    else if (p.battery_low) a.appendChild(el("span", { class: "badge storage" }, "Battery low"));
+    tr.appendChild(a);
+    td(fmt(p.soc_pct));
+    tb.appendChild(tr);
+  });
+}
+
+async function loadLogs() {
+  try {
+    const { logs } = await api("/api/logs");
+    const box = $("logs");
+    box.textContent = "";
+    logs.slice(0, 25).forEach((l) => {
+      const d = el("div", { class: "lv-" + l.level }, l.time.slice(11) + "  " + l.level.padEnd(5) + " " + l.message);
+      box.appendChild(d);
+    });
+  } catch (_) { /* logs are optional */ }
+}
+
+/* ---------------- Inputs ---------------- */
+function selectTab(name) {
+  ["sample", "upload", "manual"].forEach((t) => {
+    $("tab-" + t).setAttribute("aria-selected", String(t === name));
+    $("p-" + t).hidden = t !== name;
+  });
+  if (name !== "sample") { $("live").checked = false; stopLive(); }
+}
+["sample", "upload", "manual"].forEach((t) => $("tab-" + t).addEventListener("click", () => selectTab(t)));
+
+$("run-sample").addEventListener("click", () => {
+  const start = Number($("sample-start").value || 0);
+  liveStart = start;
+  run(() => api("/api/sample?start=" + start + "&hours=24&" + params()), "Forecasting 24 hours...");
+});
+
+$("run-upload").addEventListener("click", () => {
+  const f = $("file").files[0];
+  if (!f) { showError("Choose a CSV file first."); return; }
+  const fd = new FormData();
+  fd.append("file", f);
+  fd.append("battery_capacity_kwh", $("cap").value || "4000");
+  fd.append("initial_soc_pct", $("soc0").value || "90");
+  run(() => api("/api/forecast", { method: "POST", body: fd }), "Uploading and forecasting...");
+});
+
+function toApiTs(v) { return v.replace("T", " ") + (v.length === 16 ? ":00" : ""); }
+function renderManual() {
+  const ul = $("m-list");
+  ul.textContent = "";
+  manualRows.forEach((r, i) => {
+    const li = el("li");
+    li.appendChild(el("span", null, r.timestamp.slice(0, 16) + " · " + r.ambient_temp_c + "°C · " + r.humidity_pct + "% · " + r.solar_irradiance_wm2 + " W/m²"));
+    const b = el("button", { "aria-label": "Remove row " + (i + 1) }, "remove");
+    b.addEventListener("click", () => { manualRows.splice(i, 1); renderManual(); });
+    li.appendChild(b);
+    ul.appendChild(li);
+  });
+}
+function nextHourAfter(ts) {
+  const d = new Date(ts.replace(" ", "T"));
+  d.setHours(d.getHours() + 1);
+  const p = (x) => String(x).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+$("m-add").addEventListener("click", () => {
+  const ts = $("m-ts").value, t = $("m-temp").value, h = $("m-hum").value, s = $("m-sol").value;
+  if (!ts || t === "" || h === "" || s === "") { showError("Fill timestamp, temperature, humidity and solar irradiance."); return; }
+  manualRows.push({ timestamp: toApiTs(ts), ambient_temp_c: Number(t), humidity_pct: Number(h), solar_irradiance_wm2: Number(s) });
+  manualRows.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  $("m-ts").value = nextHourAfter(manualRows[manualRows.length - 1].timestamp);
+  $("banners").textContent = "";
+  renderManual();
+});
+$("m-fill").addEventListener("click", () => {
+  // copies the last typed row forward for 24 hours so a full window can be edited quickly
+  const base = manualRows[manualRows.length - 1];
+  if (!base) { showError("Add at least one hour first."); return; }
+  let ts = base.timestamp;
+  for (let i = 0; i < 24 && manualRows.length < 168; i++) {
+    ts = toApiTs(nextHourAfter(ts));
+    manualRows.push({ timestamp: ts, ambient_temp_c: base.ambient_temp_c, humidity_pct: base.humidity_pct, solar_irradiance_wm2: 0 });
+  }
+  renderManual();
+});
+$("run-manual").addEventListener("click", () => {
+  if (!manualRows.length) { showError("Add at least one hourly row."); return; }
+  run(() => api("/api/forecast", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rows: manualRows, battery_capacity_kwh: $("cap").value, initial_soc_pct: $("soc0").value }) }), "Forecasting...");
+});
+
+/* live mode: rolling 24 h window that advances one hour every 20 s */
+function stopLive() { if (liveTimer) clearInterval(liveTimer); liveTimer = null; }
+$("live").addEventListener("change", (e) => {
+  stopLive();
+  if (!e.target.checked) return;
+  liveStart = Number($("sample-start").value || 0);
+  const tick = () => {
+    if (busy) return;
+    liveStart += 1;
+    run(() => api("/api/sample?start=" + liveStart + "&hours=24&" + params()), "Live update...");
+  };
+  tick();
+  liveTimer = setInterval(tick, 20000);
+});
+
+async function init() {
+  try {
+    const info = await api("/api/sample-info");
+    const sel = $("sample-start");
+    const windows = Math.max(1, Math.floor(info.total_rows / 24));
+    for (let w = 0; w < Math.min(windows, 40); w++) {
+      const o = el("option", { value: String(w * 24) }, "Window " + (w + 1) + " (row " + (w * 24 + 1) + ")");
+      sel.appendChild(o);
+    }
+    $("m-ts").value = info.first ? info.first.slice(0, 16).replace(" ", "T") : "";
+  } catch (e) { showError(e.message); }
+  $("run-sample").click();
+  loadLogs();
+}
+window.addEventListener("resize", () => { /* SVGs scale with viewBox; nothing to do */ });
+init();
+</script>
+</body>
+</html>
